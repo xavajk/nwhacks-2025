@@ -1,187 +1,108 @@
 import reflex as rx
-from typing import Union
-from sqlmodel import select, asc, desc, or_, func, cast, String
-from datetime import datetime, timedelta
+import asyncio
+import typing
+from google.cloud import storage
 
 
-def _get_percentage_change(value: Union[int, float], prev_value: Union[int, float]) -> float:
-    percentage_change = (
-        round(((value - prev_value) / prev_value) * 100, 2)
-        if prev_value != 0
-        else 0
-        if value == 0
-        else
-        float("inf")
-    )
-    return percentage_change
+def upload_blob(bucket_name, source_file_name, destination_blob_name):
+    """Uploads a file to the bucket."""
+    storage_client = storage.Client(project='nwhacks-2025-448222')
+    bucket = storage_client.bucket(bucket_name)
+    blob = bucket.blob(destination_blob_name)
+    generation_match_precondition = 0
+    blob.upload_from_filename(source_file_name, if_generation_match=generation_match_precondition)
+    print(f"File {source_file_name} uploaded to {destination_blob_name}.")
 
-class Customer(rx.Model, table=True):
-    """The customer model."""
+def check_if_blob_in_storage(bucket_name, file_to_check):
+    """Checks if a given blob already exists in storage."""
+    storage_client = storage.Client(project='nwhacks-2025-448222')
+    bucket = storage_client.bucket(bucket_name)
+    return storage.Blob(bucket=bucket, name=file_to_check).exists(storage_client)
 
-    name: str
-    email: str
-    phone: str
-    address: str
-    date: str
-    payments: float
-    status: str
+class UploadState(rx.State):
+    """The uploading state."""
 
+    # The images to show.
+    audio_files: list[str] = []
+    upload_success: bool = False
+    toast_message: str = ""
 
+    def on_mount(self):
+        """Reset state variables when the state is initialized or remounted."""
+        self.upload_success = False
+        self.audio_files = []
+        self.toast_message = ""
 
-class MonthValues(rx.Base):
-    """Values for a month."""
+    @rx.event
+    async def wait_to_render(self, time: int | float):
+        await asyncio.sleep(time)
+        self.toast_message = ""
 
-    num_customers: int = 0
-    total_payments: float = 0.0
-    num_delivers: int = 0
+    @rx.event
+    async def handle_upload(
+        self, files: list[rx.UploadFile]
+    ):
+        """Handle the upload of file(s).
 
+        Args:
+            files: The uploaded files.
+        """
+        for file in files:
+            # check if filename is already in use
+            if check_if_blob_in_storage('nwhacks-2025-recordings', file.filename): 
+                self.toast_message = "File already uploaded!"
+                self.upload_success = False
+                print('File already uploaded!')
+                yield rx.toast(
+                    self.toast_message,
+                    style={
+                        "background-color": "red",
+                        "color": "white",
+                        "border": "1px solid red",
+                        "border-radius": "0.53em",
+                    }
+                )
+            else:
+                self.toast_message = "File uploaded successfully!"
+                try:
+                    # save the file locally
+                    outfile = rx.get_upload_dir() / file.filename
+                    with open(outfile, "wb") as f:
+                        f.write(file.file.read())
 
+                    # upload the file to GCP storage
+                    print(self.upload_success)
+                    upload_blob('nwhacks-2025-recordings', f'uploaded_files/{file.filename}', file.filename)
+                    print(self.upload_success)
 
-
-
-class State(rx.State):
-    """The app state."""
-
-    users: list[Customer] = []
-    sort_value: str = ""
-    sort_reverse: bool = False
-    search_value: str = ""
-    current_user: Customer = Customer()
-    # Values for current and previous month
-    current_month_values: MonthValues = MonthValues()
-    previous_month_values: MonthValues = MonthValues()
-
-
-    def load_entries(self) -> list[Customer]:
-            """Get all users from the database."""
-            with rx.session() as session:
-                query = select(Customer)
-                if self.search_value:
-                    search_value = f"%{str(self.search_value).lower()}%"
-                    query = query.where(
-                        or_(
-                            *[
-                                getattr(Customer, field).ilike(search_value)
-                                for field in Customer.get_fields()
-                                if field not in ["id", "payments"]
-                            ],
-                            # ensures that payments is cast to a string before applying the ilike operator
-                            cast(Customer.payments, String).ilike(search_value)
-                        )
+                    # Add the file to the list of uploaded files and show the toast notification.
+                    self.audio_files.append(file.filename)
+                    print(self.upload_success)
+                    yield rx.toast(
+                        self.toast_message,
+                        style={
+                            "background-color": "green",
+                            "color": "white",
+                            "border": "1px solid green",
+                            "border-radius": "0.53em",
+                        }
                     )
 
-                if self.sort_value:
-                    sort_column = getattr(Customer, self.sort_value)
-                    if self.sort_value == "payments":
-                        order = desc(sort_column) if self.sort_reverse else asc(sort_column)
-                    else:
-                        order = desc(func.lower(sort_column)) if self.sort_reverse else asc(func.lower(sort_column))
-                    query = query.order_by(order)
-                
-                self.users = session.exec(query).all()
+                except Exception as e:
+                    self.toast_message = "Could not upload file." # set the error message
+                    self.upload_success = False
+                    print(f"Upload failed: {e}")
+                    yield rx.toast(
+                        self.toast_message,
+                        style={
+                            "background-color": "red",
+                            "color": "white",
+                            "border": "1px solid red",
+                            "border-radius": "0.53em",
+                        }
+                    )
 
-            self.get_current_month_values()
-            self.get_previous_month_values()
-
-
-    def get_current_month_values(self):
-        """Calculate current month's values."""
-        now = datetime.now()
-        start_of_month = datetime(now.year, now.month, 1)
-        
-        current_month_users = [
-            user for user in self.users if datetime.strptime(user.date, '%Y-%m-%d %H:%M:%S') >= start_of_month
-        ]
-        num_customers = len(current_month_users)
-        total_payments = sum(user.payments for user in current_month_users)
-        num_delivers = len([user for user in current_month_users if user.status == "Delivered"])
-        self.current_month_values = MonthValues(num_customers=num_customers, total_payments=total_payments, num_delivers=num_delivers)
-
-
-    def get_previous_month_values(self):
-        """Calculate previous month's values."""
-        now = datetime.now()
-        first_day_of_current_month = datetime(now.year, now.month, 1)
-        last_day_of_last_month = first_day_of_current_month - timedelta(days=1)
-        start_of_last_month = datetime(last_day_of_last_month.year, last_day_of_last_month.month, 1)
-        
-        previous_month_users = [
-            user for user in self.users
-            if start_of_last_month <= datetime.strptime(user.date, '%Y-%m-%d %H:%M:%S') <= last_day_of_last_month
-        ]
-        # We add some dummy values to simulate growth/decline. Remove them in production.
-        num_customers = len(previous_month_users) + 3
-        total_payments = sum(user.payments for user in previous_month_users) + 240
-        num_delivers = len([user for user in previous_month_users if user.status == "Delivered"]) + 5
-        
-        self.previous_month_values = MonthValues(num_customers=num_customers, total_payments=total_payments, num_delivers=num_delivers)
-
-
-    def sort_values(self, sort_value: str):
-        self.sort_value = sort_value
-        self.load_entries()
-
-
-    def toggle_sort(self):
-        self.sort_reverse = not self.sort_reverse
-        self.load_entries()
-
-    def filter_values(self, search_value):
-        self.search_value = search_value
-        self.load_entries()
-
-    def get_user(self, user: Customer):
-        self.current_user = user
-
-
-    def add_customer_to_db(self, form_data: dict):
-        self.current_user = form_data
-        self.current_user["date"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-        with rx.session() as session:
-            if session.exec(
-                select(Customer).where(Customer.email == self.current_user["email"])
-            ).first():
-                return rx.window_alert("User with this email already exists")
-            session.add(Customer(**self.current_user))
-            session.commit()
-        self.load_entries()
-        return rx.toast.info(f"User {self.current_user['name']} has been added.", position="bottom-right")
-    
-
-    def update_customer_to_db(self, form_data: dict):
-        self.current_user.update(form_data)
-        with rx.session() as session:
-            customer = session.exec(
-                select(Customer).where(Customer.id == self.current_user["id"])
-            ).first()
-            for field in Customer.get_fields():
-                if field != "id":
-                    setattr(customer, field, self.current_user[field])
-            session.add(customer)
-            session.commit()
-        self.load_entries()
-        return rx.toast.info(f"User {self.current_user['name']} has been modified.", position="bottom-right")
-
-
-    def delete_customer(self, id: int):
-        """Delete a customer from the database."""
-        with rx.session() as session:
-            customer = session.exec(select(Customer).where(Customer.id == id)).first()
-            session.delete(customer)
-            session.commit()
-        self.load_entries()
-        return rx.toast.info(f"User {customer.name} has been deleted.", position="bottom-right")
-    
-    
-    @rx.var(cache=True)
-    def payments_change(self) -> float:
-        return _get_percentage_change(self.current_month_values.total_payments, self.previous_month_values.total_payments)
-
-    @rx.var(cache=True)
-    def customers_change(self) -> float:
-        return _get_percentage_change(self.current_month_values.num_customers, self.previous_month_values.num_customers)
-
-    @rx.var(cache=True)
-    def delivers_change(self) -> float:
-        return _get_percentage_change(self.current_month_values.num_delivers, self.previous_month_values.num_delivers)
+class IdeaObject(rx.Base):
+    title: str
+    body: str
+    tags: list(str)
