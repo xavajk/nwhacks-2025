@@ -1,6 +1,6 @@
 import reflex as rx
 import asyncio
-import typing
+from typing import List, Literal
 from google.cloud import storage
 
 
@@ -105,4 +105,8 @@ class UploadState(rx.State):
 class IdeaObject(rx.Base):
     title: str
     body: str
-    tags: list(str)
+    tags: List[str]
+
+class AppState(rx.State):
+    ideas: List[IdeaObject]
+    page: Literal['capture', 'explore', 'create'] = 'capture'

@@ -21,14 +21,14 @@ def upload_audio(id: str) -> rx.Component:
             border=f"1px dotted {color}",
             padding="2em",
             accept={'audio/mpeg': 'mp3'},
-            max_files=1,
+            max_files=3,
         ),
         rx.hstack(
             rx.foreach(
                 rx.selected_files(id), rx.text
             )
         ),
-        rx.hstack(
+        rx.flex(
             rx.button(
                 "Upload",
                 on_click=[
@@ -40,47 +40,10 @@ def upload_audio(id: str) -> rx.Component:
                 "Clear",
                 on_click=rx.clear_selected_files(id),
             ),
+            spacing='2',
+            direction="row",
+            align="stretch",
+            justify="between"
         ),
-        # rx.cond(
-        #     UploadState.toast_message,  # Check if there's a message to show
-        #     rx.toast(
-        #         UploadState.toast_message,
-        #         position="bottom-right",
-        #         style={
-        #             "background-color": rx.cond(
-        #                 UploadState.upload_success, "green", "red"
-        #             ),
-        #             "color": "white",
-        #             "border": "1px solid",
-        #             "border-radius": "0.53em",
-        #         },
-        #     ),
-        #     rx.text(""),
-        padding="5em",
+        padding="2em",
     )
-
-
-
-# rx.cond(
-#     UploadState.upload_success,
-#     rx.toast(
-#         UploadState.toast_message,
-#         position="bottom-right",
-#         style={
-#                 "background-color": "green",
-#                 "color": "white",
-#                 "border": "1px solid green",
-#                 "border-radius": "0.53m",
-#         }
-#     ),
-#     rx.toast(
-#         UploadState.toast_message,
-#         position="bottom-right",
-#         style={
-#             "background-color": "red",
-#             "color": "white",
-#             "border": "1px solid red",
-#             "border-radius": "0.53m",
-#         },
-#     ),
-# )
