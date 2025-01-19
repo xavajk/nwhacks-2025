@@ -1,5 +1,6 @@
 import reflex as rx
 from .pages.capture import capture
+from .pages.explore import explore
 from .components.navbar import navbar
 from .backend.backend import AppState
 
