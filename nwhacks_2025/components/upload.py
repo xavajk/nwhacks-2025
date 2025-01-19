@@ -1,6 +1,5 @@
 import reflex as rx
-import asyncio
-from ..backend.backend import UploadState
+from ..backend.backend import UploadState, AppState
 
 def upload_audio(id: str) -> rx.Component:
     color = "rgb(107,99,246)"
@@ -34,6 +33,7 @@ def upload_audio(id: str) -> rx.Component:
                 on_click=[
                     UploadState.handle_upload(rx.upload_files(upload_id=id)),
                     rx.clear_selected_files(id),
+                    AppState.add_ideas(UploadState.audio_files)
                 ]
             ),
             rx.button(

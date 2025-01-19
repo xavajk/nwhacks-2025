@@ -53,14 +53,14 @@ def generate():
         location="us-central1"
     )
 
-    audio1 = types.Part.from_uri(file_uri='gs://nwhacks-2025-recordings/test-blob.mp3', mime_type="audio/mp3")
+    audio = types.Part.from_uri(file_uri='gs://nwhacks-2025-recordings/test-blob.mp3', mime_type="audio/mp3")
 
     model = "gemini-2.0-flash-exp"
     contents = [
         types.Content(
         role="user",
         parts=[
-            audio1,
+            audio,
             types.Part.from_text("""Give me a transcript of the accompanying audio file.""")
         ]
         )

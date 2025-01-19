@@ -1,14 +1,25 @@
 import reflex as rx
 from ..components.upload import upload_audio
 from ..components.navbar import navbar
+from ..backend.backend import AppState
 
 def explore_view():
     return rx.box(
         rx.vstack(
+            rx.hstack(
+                rx.input(
+                    rx.input.slot(rx.icon("search")),
+                    placeholder="Search...",
+                    type="search",
+                    size="3",
+                ),
+                rx.button(rx.icon('sparkles'), variant="ghost"),
+                align="center",
+            ),
             rx.grid(
                 rx.foreach(
-                    rx.Var.range(12),
-                    lambda i: rx.card(f"Card {i + 1}", height="10vh"),
+                    AppState.ideas,
+                    lambda i: rx.card(f"{i.title}", height="10vh"),
                 ),
                 gap="1rem",
                 grid_template_columns=[
@@ -19,10 +30,12 @@ def explore_view():
                     "repeat(4, 1fr)",
                 ],
                 width="100%",
+                padding="1.5em"
             ),
             align="center",
             justify="center",
-            height="100%"
+            height="100%",
+            padding="2em"
         ),
         width="100%",
         height="100%",
